@@ -4,9 +4,6 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
 	"github.com/taylormonacelli/eachit/run"
 )
@@ -29,12 +26,7 @@ var runCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(runCmd)
 
-	runCmd.Flags().StringSliceVar(&containerNamesToRemove, "destroy-containers", []string{"packer-jammy"}, "List of container names to remove")
-	if err := runCmd.MarkFlagRequired("destroy-containers"); err != nil {
-		fmt.Println("Error marking flag as required:", err)
-		os.Exit(1)
-	}
-
+	runCmd.Flags().StringSliceVar(&containerNamesToRemove, "destroy-containers", []string{"mythai"}, "List of container names to remove")
 	runCmd.Flags().StringSliceVar(&excludeHcls, "exclude-hcls", []string{}, "List of HCL files to exclude from building")
 	runCmd.Flags().StringSliceVar(&hclFiles, "hcl", []string{}, "List of HCL files to build (overrides default build list)")
 }

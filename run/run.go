@@ -68,6 +68,13 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 
 		DestroyContainers(containerNamesToRemove)
 
+		fmt.Printf("Running packer init for HCL file: %s\n", hclFile)
+		initCmd := exec.Command("packer", "init", hclFile)
+		if err := initCmd.Run(); err != nil {
+			fmt.Printf("Error running packer init for HCL file %s: %v\n", hclFile, err)
+			os.Exit(1)
+		}
+
 		logFile := fmt.Sprintf("%s.log", hclFile)
 		if fileInfo, err := os.Stat(logFile); err == nil {
 			if fileInfo.Size() > 5 {
@@ -120,10 +127,10 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 			fmt.Printf("Error building HCL file %s: %v\n", hclFile, err)
 			failedBuilds = append(failedBuilds, hclFile)
 			log.Printf("Build duration for %s: %s (failed)\n", hclFile, time.Since(startTime).String())
-			_, _ = logFileWriter.WriteString(fmt.Sprintf("Build duration: %s (failed)\n", time.Since(startTime).String()))
+			_, _ = logFileWriter.WriteString(fmt.Sprintf("Build duration: %s (failed)\n", time.Since(startTime).Truncate(time.Second).String()))
 		} else {
 			log.Printf("Build duration for %s: %s (success)\n", hclFile, time.Since(startTime).String())
-			_, _ = logFileWriter.WriteString(fmt.Sprintf("Build duration: %s (success)\n", time.Since(startTime).String()))
+			_, _ = logFileWriter.WriteString(fmt.Sprintf("Build duration: %s (success)\n", time.Since(startTime).Truncate(time.Second).String()))
 		}
 	}
 
