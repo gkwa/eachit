@@ -1,0 +1,7 @@
+* eachit
+
+This is a description of my eachit.
+
+** Usage
+
+To use my project, run this command: ./eachit --verbose
