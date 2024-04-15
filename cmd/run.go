@@ -1,40 +1,39 @@
-/*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-
-*/
 package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/taylormonacelli/eachit/run"
 )
 
-// runCmd represents the run command
+var (
+	containerNamesToRemove []string
+	excludeHcls            []string
+	hclFiles               []string
+)
+
 var runCmd = &cobra.Command{
 	Use:   "run",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Remove specified containers and build HCL files",
+	Long:  `Remove the specified containers using the incus command and build HCL files using Packer.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("run called")
+		run.DestroyContainers(containerNamesToRemove)
+		run.BuildHclFiles(excludeHcls, hclFiles)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(runCmd)
 
-	// Here you will define your flags and configuration settings.
+	runCmd.Flags().StringSliceVar(&containerNamesToRemove, "destroy-containers", []string{"packer-jammy"}, "List of container names to remove")
+	err := runCmd.MarkFlagRequired("destroy-containers")
+	if err != nil {
+		fmt.Println("Error marking flag as required:", err)
+		os.Exit(1)
+	}
 
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// runCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// runCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	runCmd.Flags().StringSliceVar(&excludeHcls, "exclude-hcls", []string{}, "List of HCL files to exclude from building")
+	runCmd.Flags().StringSliceVar(&hclFiles, "hcl", []string{}, "List of HCL files to build (overrides default build list)")
 }
