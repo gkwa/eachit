@@ -25,8 +25,7 @@ func DestroyContainers(containerNamesToRemove []string) {
 	}
 
 	var containers []Container
-	err = json.Unmarshal(output, &containers)
-	if err != nil {
+	if err := json.Unmarshal(output, &containers); err != nil {
 		fmt.Println("Error parsing JSON:", err)
 		return
 	}
@@ -46,7 +45,7 @@ func destroyContainer(name string) {
 	}
 }
 
-func BuildHclFiles(excludeHcls, hclFiles []string) {
+func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 	var buildFiles []string
 
 	if len(hclFiles) > 0 {
@@ -67,7 +66,16 @@ func BuildHclFiles(excludeHcls, hclFiles []string) {
 			continue
 		}
 
+		DestroyContainers(containerNamesToRemove)
+
 		logFile := fmt.Sprintf("%s.log", hclFile)
+		if fileInfo, err := os.Stat(logFile); err == nil {
+			if fileInfo.Size() > 5 {
+				fmt.Printf("Log file %s already exists, skipping build\n", logFile)
+				continue
+			}
+		}
+
 		logFileWriter, err := os.Create(logFile)
 		if err != nil {
 			fmt.Printf("Error creating log file %s: %v\n", logFile, err)
@@ -90,27 +98,32 @@ func BuildHclFiles(excludeHcls, hclFiles []string) {
 			continue
 		}
 
-		err = cmd.Start()
-		if err != nil {
+		if err := cmd.Start(); err != nil {
 			fmt.Printf("Error starting command: %v\n", err)
 			continue
 		}
 
-		go io.Copy(os.Stdout, stdout)
-		go io.Copy(os.Stderr, stderr)
-		go io.Copy(logFileWriter, io.MultiReader(stdout, stderr))
+		go func() {
+			_, err := io.Copy(io.MultiWriter(os.Stdout, logFileWriter), stdout)
+			if err != nil {
+				fmt.Printf("Error copying stdout: %v\n", err)
+			}
+		}()
+		go func() {
+			_, err := io.Copy(io.MultiWriter(os.Stderr, logFileWriter), stderr)
+			if err != nil {
+				fmt.Printf("Error copying stderr: %v\n", err)
+			}
+		}()
 
-		err = cmd.Wait()
-		duration := time.Since(startTime)
-
-		if err != nil {
+		if err := cmd.Wait(); err != nil {
 			fmt.Printf("Error building HCL file %s: %v\n", hclFile, err)
 			failedBuilds = append(failedBuilds, hclFile)
-			log.Printf("Build duration for %s: %s (failed)\n", hclFile, duration.String())
-			_, _ = logFileWriter.WriteString(fmt.Sprintf("Build duration: %s (failed)\n", duration.String()))
+			log.Printf("Build duration for %s: %s (failed)\n", hclFile, time.Since(startTime).String())
+			_, _ = logFileWriter.WriteString(fmt.Sprintf("Build duration: %s (failed)\n", time.Since(startTime).String()))
 		} else {
-			log.Printf("Build duration for %s: %s (success)\n", hclFile, duration.String())
-			_, _ = logFileWriter.WriteString(fmt.Sprintf("Build duration: %s (success)\n", duration.String()))
+			log.Printf("Build duration for %s: %s (success)\n", hclFile, time.Since(startTime).String())
+			_, _ = logFileWriter.WriteString(fmt.Sprintf("Build duration: %s (success)\n", time.Since(startTime).String()))
 		}
 	}
 

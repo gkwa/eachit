@@ -1,3 +1,6 @@
+/*
+Copyright © 2023 NAME HERE <EMAIL ADDRESS>
+*/
 package cmd
 
 import (
@@ -28,8 +31,7 @@ to quickly create a Cobra application.`,
 }
 
 func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
@@ -37,26 +39,21 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	var err error
-
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.eachit.yaml)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose mode")
-	err = viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
-	if err != nil {
+	if err := viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose")); err != nil {
 		slog.Error("error binding verbose flag", "error", err)
 		os.Exit(1)
 	}
 
 	rootCmd.PersistentFlags().StringVar(&logFormat, "log-format", "", "json or text (default is text)")
-	err = viper.BindPFlag("log-format", rootCmd.PersistentFlags().Lookup("log-format"))
-	if err != nil {
+	if err := viper.BindPFlag("log-format", rootCmd.PersistentFlags().Lookup("log-format")); err != nil {
 		slog.Error("error binding log-format flag", "error", err)
 		os.Exit(1)
 	}
 
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	err = viper.BindPFlag("toggle", rootCmd.Flags().Lookup("toggle"))
-	if err != nil {
+	if err := viper.BindPFlag("toggle", rootCmd.Flags().Lookup("toggle")); err != nil {
 		slog.Error("error binding toggle flag", "error", err)
 		os.Exit(1)
 	}
