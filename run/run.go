@@ -102,8 +102,6 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 			continue
 		}
 
-		DestroyContainers(containerNamesToRemove)
-
 		logFile := fmt.Sprintf("%s.log", hclFile)
 		if fileInfo, err := os.Stat(logFile); err == nil {
 			if fileInfo.Size() > 5 {
@@ -111,6 +109,8 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 				continue
 			}
 		}
+
+		DestroyContainers(containerNamesToRemove)
 
 		fmt.Printf("Running packer init for HCL file: %s\n", hclFile)
 		initCmd := exec.Command("packer", "init", hclFile)
