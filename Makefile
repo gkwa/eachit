@@ -19,7 +19,8 @@ else ifeq ($(OS),Windows_NT)
 endif
 
 APP := eachit$(EXEEXT)
-TARGET := ./dist/eachit_$(GOOS)_$(GOARCH)_v1/$(APP)
+VERSION := $(shell git describe --tags --dirty --always)
+TARGET := ./dist/eachit_$(GOOS)_$(GOARCH)_$(VERSION)/$(APP)
 
 $(APP): $(TARGET)
 	cp $< $@

@@ -10,6 +10,8 @@ builds:
   - windows
   - darwin
   main: main.go
+  ldflags:
+  - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }}
   goarch:
   - amd64
   binary: eachit
