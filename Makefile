@@ -1,31 +1,39 @@
-BIN := eachit
-
-GOPATH := $(shell go env GOPATH)
-
 ifeq ($(OS),Windows_NT)
-    GO_FILES := $(shell dir /S /B *.go)
-    GO_DEPS := $(shell dir /S /B go.mod go.sum)
-    CLEAN := del
+    SOURCES := $(shell dir /S /B *.go)
 else
-    GO_FILES := $(shell find . -name '*.go')
-    GO_DEPS := $(shell find . -name go.mod -o -name go.sum)
-    CLEAN := rm -f
+    SOURCES := $(shell find . -name '*.go')
 endif
 
-$(BIN): $(GO_FILES) $(GO_DEPS)
-	go mod tidy
-	gofumpt -w $(GO_FILES)
-	golangci-lint run
-	go build -o $(BIN) main.go
+ifeq ($(shell uname),Darwin)
+    GOOS = darwin
+    GOARCH = amd64
+    EXEEXT =
+else ifeq ($(shell uname),Linux)
+    GOOS = linux
+    GOARCH = amd64
+    EXEEXT =
+else ifeq ($(OS),Windows_NT)
+    GOOS = windows
+    GOARCH = amd64
+    EXEEXT = .exe
+endif
 
-.PHONY: test
-test: $(BIN)
-	./$(BIN) -v -v
+APP := eachit$(EXEEXT)
+TARGET := ./dist/eachit_$(GOOS)_$(GOARCH)_v1/$(APP)
 
-.PHONY: install
-install: $(BIN)
-	mv $(BIN) $(GOPATH)/bin/$(BIN)
+$(APP): $(TARGET)
+	cp $< $@
+
+$(TARGET): $(SOURCES)
+	gofumpt -w $(SOURCES)
+	goreleaser build --single-target --snapshot --clean
+	go vet ./...
+
+all:
+	goreleaser build --snapshot --clean
 
 .PHONY: clean
 clean:
-	$(CLEAN) $(BIN)
+	rm -f eachit
+	rm -f $(TARGET)
+	rm -rf dist
