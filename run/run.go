@@ -93,13 +93,6 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 	successFile := "success_list.txt"
 	failureFile := "failure_list.txt"
 
-	if err := os.Remove(successFile); err != nil && !os.IsNotExist(err) {
-		fmt.Printf("Error removing success file: %v\n", err)
-	}
-	if err := os.Remove(failureFile); err != nil && !os.IsNotExist(err) {
-		fmt.Printf("Error removing failure file: %v\n", err)
-	}
-
 	failedBuilds := make([]string, 0)
 
 	tempDir := os.TempDir()
@@ -111,19 +104,19 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 
 		DestroyContainers(containerNamesToRemove)
 
-		fmt.Printf("Running packer init for HCL file: %s\n", hclFile)
-		initCmd := exec.Command("packer", "init", hclFile)
-		if err := initCmd.Run(); err != nil {
-			fmt.Printf("Error running packer init for HCL file %s: %v\n", hclFile, err)
-			os.Exit(1)
-		}
-
 		logFile := fmt.Sprintf("%s.log", hclFile)
 		if fileInfo, err := os.Stat(logFile); err == nil {
 			if fileInfo.Size() > 5 {
 				fmt.Printf("Log file %s already exists, skipping build\n", logFile)
 				continue
 			}
+		}
+
+		fmt.Printf("Running packer init for HCL file: %s\n", hclFile)
+		initCmd := exec.Command("packer", "init", hclFile)
+		if err := initCmd.Run(); err != nil {
+			fmt.Printf("Error running packer init for HCL file %s: %v\n", hclFile, err)
+			os.Exit(1)
 		}
 
 		tempLogFile := filepath.Join(tempDir, filepath.Base(logFile))
@@ -167,28 +160,30 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 			}
 		}()
 
-		if err := cmd.Wait(); err != nil {
+		err = cmd.Wait()
+		buildDuration := time.Since(startTime).Truncate(time.Second).String()
+
+		if err != nil {
 			fmt.Printf("Error building HCL file %s: %v\n", hclFile, err)
 			failedBuilds = append(failedBuilds, hclFile)
-			log.Printf("Build duration for %s: %s (failed)\n", hclFile, time.Since(startTime).Truncate(time.Second).String())
-			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (failed)\n", time.Since(startTime).Truncate(time.Second).String()))
+			log.Printf("Build duration for %s: %s (failed)\n", hclFile, buildDuration)
+			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (failed)\n", buildDuration))
 			appendToFile(failureFile, hclFile)
 		} else {
-			log.Printf("Build duration for %s: %s (success)\n", hclFile, time.Since(startTime).Truncate(time.Second).String())
-			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (success)\n", time.Since(startTime).Truncate(time.Second).String()))
-
-			if err := os.Rename(tempLogFile, logFile); err != nil {
-				fmt.Printf("Error moving log file from %s to %s: %v\n", tempLogFile, logFile, err)
-			}
-
+			log.Printf("Build duration for %s: %s (success)\n", hclFile, buildDuration)
+			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (success)\n", buildDuration))
 			appendToFile(successFile, hclFile)
+		}
 
-			logFileBytes, err := os.ReadFile(logFile)
-			if err != nil {
-				fmt.Printf("Error reading log file %s: %v\n", logFile, err)
-			} else {
-				ntfy.SendNotification(string(logFileBytes))
-			}
+		if err := os.Rename(tempLogFile, logFile); err != nil {
+			fmt.Printf("Error moving log file from %s to %s: %v\n", tempLogFile, logFile, err)
+		}
+
+		logFileBytes, err := os.ReadFile(logFile)
+		if err != nil {
+			fmt.Printf("Error reading log file %s: %v\n", logFile, err)
+		} else {
+			ntfy.SendNotification(string(logFileBytes))
 		}
 	}
 
