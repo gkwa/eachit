@@ -44,7 +44,6 @@ func destroyContainer(name string) {
 	retryDelay := time.Second
 
 	for i := 0; i < maxRetries; i++ {
-		fmt.Printf("Checking if container exists: %s\n", name)
 		cmd := exec.Command("incus", "ls", name)
 		if err := cmd.Run(); err != nil {
 			if exitError, ok := err.(*exec.ExitError); ok {
