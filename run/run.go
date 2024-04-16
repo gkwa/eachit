@@ -14,11 +14,6 @@ import (
 	"github.com/taylormonacelli/eachit/ntfy"
 )
 
-const (
-	trueConst  = true
-	falseConst = false
-)
-
 type Container struct {
 	Name string `json:"name"`
 }
@@ -107,6 +102,8 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 
 	failedBuilds := make([]string, 0)
 
+	tempDir := os.TempDir()
+
 	for _, hclFile := range buildFiles {
 		if contains(excludeHcls, hclFile) {
 			continue
@@ -129,17 +126,18 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 			}
 		}
 
-		logFileWriter, err := os.Create(logFile)
+		tempLogFile := filepath.Join(tempDir, filepath.Base(logFile))
+		tempLogFileWriter, err := os.Create(tempLogFile)
 		if err != nil {
-			fmt.Printf("Error creating log file %s: %v\n", logFile, err)
+			fmt.Printf("Error creating temp log file %s: %v\n", tempLogFile, err)
 			continue
 		}
-		defer logFileWriter.Close()
+		defer tempLogFileWriter.Close()
 
 		fmt.Printf("Building HCL file: %s\n", hclFile)
 
 		startTime := time.Now()
-		cmd := exec.Command("packer", "build", "-color", fmt.Sprintf("%t", falseConst), hclFile)
+		cmd := exec.Command("packer", "build", "-color=false", hclFile)
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			fmt.Printf("Error getting stdout pipe: %v\n", err)
@@ -157,13 +155,13 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 		}
 
 		go func() {
-			_, err := io.Copy(io.MultiWriter(os.Stdout, logFileWriter), stdout)
+			_, err := io.Copy(io.MultiWriter(os.Stdout, tempLogFileWriter), stdout)
 			if err != nil {
 				fmt.Printf("Error copying stdout: %v\n", err)
 			}
 		}()
 		go func() {
-			_, err := io.Copy(io.MultiWriter(os.Stderr, logFileWriter), stderr)
+			_, err := io.Copy(io.MultiWriter(os.Stderr, tempLogFileWriter), stderr)
 			if err != nil {
 				fmt.Printf("Error copying stderr: %v\n", err)
 			}
@@ -173,11 +171,16 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 			fmt.Printf("Error building HCL file %s: %v\n", hclFile, err)
 			failedBuilds = append(failedBuilds, hclFile)
 			log.Printf("Build duration for %s: %s (failed)\n", hclFile, time.Since(startTime).Truncate(time.Second).String())
-			_, _ = logFileWriter.WriteString(fmt.Sprintf("Build duration: %s (failed)\n", time.Since(startTime).Truncate(time.Second).String()))
+			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (failed)\n", time.Since(startTime).Truncate(time.Second).String()))
 			appendToFile(failureFile, hclFile)
 		} else {
 			log.Printf("Build duration for %s: %s (success)\n", hclFile, time.Since(startTime).Truncate(time.Second).String())
-			_, _ = logFileWriter.WriteString(fmt.Sprintf("Build duration: %s (success)\n", time.Since(startTime).Truncate(time.Second).String()))
+			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (success)\n", time.Since(startTime).Truncate(time.Second).String()))
+
+			if err := os.Rename(tempLogFile, logFile); err != nil {
+				fmt.Printf("Error moving log file from %s to %s: %v\n", tempLogFile, logFile, err)
+			}
+
 			appendToFile(successFile, hclFile)
 
 			logFileBytes, err := os.ReadFile(logFile)
