@@ -10,6 +10,15 @@ Eachit is a command-line tool that automates the process of removing specified c
 - Retry logic for container removal
 - Logging of build duration and status
 
+## Installation
+
+### Linux
+
+```bash
+url=https://github.com/taylormonacelli/eachit/releases/latest/download/eachit_Linux_x86_64.tar.gz
+curl -fsSL $url | tar -C /usr/local/bin --no-same-owner -xz eachit
+```
+
 ## Usage
 
 ```bash
