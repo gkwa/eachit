@@ -4,7 +4,7 @@ go 1.21.4
 
 require (
 	github.com/spf13/cobra v1.9.1
-	github.com/spf13/viper v1.20.0
+	github.com/spf13/viper v1.20.1
 	github.com/taylormonacelli/goldbug v0.0.6
 )
 
