@@ -169,13 +169,21 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 			failedBuilds = append(failedBuilds, hclFile)
 			log.Printf("Build duration for %s: %s (failed)\n", hclFile, buildDuration)
 			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (failed)\n", buildDuration))
-			removeFromFile(successFile, hclFile)
-			appendToFile(failureFile, hclFile)
+
+			// Remove from success list if it exists there, then add to failure list
+			if removeFromFile(successFile, hclFile) {
+				slog.Debug("moved build from success to failure list", "file", hclFile)
+			}
+			addToFile(failureFile, hclFile)
 		} else {
 			log.Printf("Build duration for %s: %s (success)\n", hclFile, buildDuration)
 			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (success)\n", buildDuration))
-			removeFromFile(failureFile, hclFile)
-			appendToFile(successFile, hclFile)
+
+			// Remove from failure list if it exists there, then add to success list
+			if removeFromFile(failureFile, hclFile) {
+				slog.Debug("moved build from failure to success list", "file", hclFile)
+			}
+			addToFile(successFile, hclFile)
 		}
 
 		if err := os.Rename(tempLogFile, logFile); err != nil {
@@ -207,8 +215,8 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-func appendToFile(filename, content string) {
-	// Check if the content already exists in the file
+// addToFile adds content to file if it doesn't already exist
+func addToFile(filename, content string) {
 	if fileContains(filename, content) {
 		slog.Debug("entry already exists in file", "file", filename, "content", content)
 		return
@@ -220,7 +228,13 @@ func appendToFile(filename, content string) {
 		return
 	}
 	defer file.Close()
-	_, _ = file.WriteString(content + "\n")
+
+	_, err = file.WriteString(content + "\n")
+	if err != nil {
+		fmt.Printf("Error writing to file %s: %v\n", filename, err)
+		return
+	}
+
 	slog.Debug("added entry to file", "file", filename, "content", content)
 }
 
@@ -240,62 +254,68 @@ func fileContains(filename, content string) bool {
 	return false
 }
 
-func removeFromFile(filename, content string) {
+// removeFromFile removes content from file and returns true if content was found and removed
+func removeFromFile(filename, content string) bool {
 	if !fileContains(filename, content) {
 		slog.Debug("entry not found in file, nothing to remove", "file", filename, "content", content)
-		return
+		return false
 	}
 
 	file, err := os.Open(filename)
 	if err != nil {
-		return // File doesn't exist, nothing to remove
+		slog.Debug("could not open file for reading", "file", filename, "error", err)
+		return false
 	}
-	defer file.Close()
 
 	var lines []string
 	scanner := bufio.NewScanner(file)
+	found := false
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.TrimSpace(line) != strings.TrimSpace(content) {
-			lines = append(lines, line)
+		if strings.TrimSpace(line) == strings.TrimSpace(content) {
+			found = true
+			continue // skip this line (remove it)
 		}
+		lines = append(lines, line)
 	}
+	file.Close()
 
 	if err := scanner.Err(); err != nil {
 		fmt.Printf("Error reading file %s: %v\n", filename, err)
-		return
+		return false
+	}
+
+	if !found {
+		slog.Debug("content not found in file during removal", "file", filename, "content", content)
+		return false
 	}
 
 	// Write the updated content back to the file
-	tempFile, err := os.CreateTemp("", "temp_*")
+	file, err = os.OpenFile(filename, os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		fmt.Printf("Error creating temp file: %v\n", err)
-		return
+		fmt.Printf("Error opening file for writing %s: %v\n", filename, err)
+		return false
 	}
-	defer os.Remove(tempFile.Name())
+	defer file.Close()
 
-	writer := bufio.NewWriter(tempFile)
+	writer := bufio.NewWriter(file)
 	for _, line := range lines {
 		if _, err := writer.WriteString(line + "\n"); err != nil {
-			fmt.Printf("Error writing to temp file: %v\n", err)
-			return
+			fmt.Printf("Error writing to file: %v\n", err)
+			return false
 		}
 	}
 
 	if err := writer.Flush(); err != nil {
-		fmt.Printf("Error flushing temp file: %v\n", err)
-		return
-	}
-
-	if err := tempFile.Close(); err != nil {
-		fmt.Printf("Error closing temp file: %v\n", err)
-		return
-	}
-
-	if err := os.Rename(tempFile.Name(), filename); err != nil {
-		fmt.Printf("Error renaming temp file to %s: %v\n", filename, err)
-		return
+		fmt.Printf("Error flushing file: %v\n", err)
+		return false
 	}
 
 	slog.Debug("removed entry from file", "file", filename, "content", content)
+	return true
+}
+
+// Deprecated: use addToFile instead
+func appendToFile(filename, content string) {
+	addToFile(filename, content)
 }
