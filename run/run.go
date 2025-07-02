@@ -1,10 +1,12 @@
 package run
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -167,10 +169,12 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 			failedBuilds = append(failedBuilds, hclFile)
 			log.Printf("Build duration for %s: %s (failed)\n", hclFile, buildDuration)
 			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (failed)\n", buildDuration))
+			removeFromFile(successFile, hclFile)
 			appendToFile(failureFile, hclFile)
 		} else {
 			log.Printf("Build duration for %s: %s (success)\n", hclFile, buildDuration)
 			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (success)\n", buildDuration))
+			removeFromFile(failureFile, hclFile)
 			appendToFile(successFile, hclFile)
 		}
 
@@ -204,6 +208,12 @@ func contains(slice []string, item string) bool {
 }
 
 func appendToFile(filename, content string) {
+	// Check if the content already exists in the file
+	if fileContains(filename, content) {
+		slog.Debug("entry already exists in file", "file", filename, "content", content)
+		return
+	}
+
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		fmt.Printf("Error appending to file %s: %v\n", filename, err)
@@ -211,4 +221,81 @@ func appendToFile(filename, content string) {
 	}
 	defer file.Close()
 	_, _ = file.WriteString(content + "\n")
+	slog.Debug("added entry to file", "file", filename, "content", content)
+}
+
+func fileContains(filename, content string) bool {
+	file, err := os.Open(filename)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		if strings.TrimSpace(scanner.Text()) == strings.TrimSpace(content) {
+			return true
+		}
+	}
+	return false
+}
+
+func removeFromFile(filename, content string) {
+	if !fileContains(filename, content) {
+		slog.Debug("entry not found in file, nothing to remove", "file", filename, "content", content)
+		return
+	}
+
+	file, err := os.Open(filename)
+	if err != nil {
+		return // File doesn't exist, nothing to remove
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) != strings.TrimSpace(content) {
+			lines = append(lines, line)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("Error reading file %s: %v\n", filename, err)
+		return
+	}
+
+	// Write the updated content back to the file
+	tempFile, err := os.CreateTemp("", "temp_*")
+	if err != nil {
+		fmt.Printf("Error creating temp file: %v\n", err)
+		return
+	}
+	defer os.Remove(tempFile.Name())
+
+	writer := bufio.NewWriter(tempFile)
+	for _, line := range lines {
+		if _, err := writer.WriteString(line + "\n"); err != nil {
+			fmt.Printf("Error writing to temp file: %v\n", err)
+			return
+		}
+	}
+
+	if err := writer.Flush(); err != nil {
+		fmt.Printf("Error flushing temp file: %v\n", err)
+		return
+	}
+
+	if err := tempFile.Close(); err != nil {
+		fmt.Printf("Error closing temp file: %v\n", err)
+		return
+	}
+
+	if err := os.Rename(tempFile.Name(), filename); err != nil {
+		fmt.Printf("Error renaming temp file to %s: %v\n", filename, err)
+		return
+	}
+
+	slog.Debug("removed entry from file", "file", filename, "content", content)
 }
