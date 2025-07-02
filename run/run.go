@@ -1,12 +1,10 @@
 package run
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -169,21 +167,11 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 			failedBuilds = append(failedBuilds, hclFile)
 			log.Printf("Build duration for %s: %s (failed)\n", hclFile, buildDuration)
 			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (failed)\n", buildDuration))
-
-			// Remove from success list if it exists there, then add to failure list
-			if removeFromFile(successFile, hclFile) {
-				slog.Debug("moved build from success to failure list", "file", hclFile)
-			}
-			addToFile(failureFile, hclFile)
+			appendToFile(failureFile, hclFile)
 		} else {
 			log.Printf("Build duration for %s: %s (success)\n", hclFile, buildDuration)
 			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (success)\n", buildDuration))
-
-			// Remove from failure list if it exists there, then add to success list
-			if removeFromFile(failureFile, hclFile) {
-				slog.Debug("moved build from failure to success list", "file", hclFile)
-			}
-			addToFile(successFile, hclFile)
+			appendToFile(successFile, hclFile)
 		}
 
 		if err := os.Rename(tempLogFile, logFile); err != nil {
@@ -215,107 +203,12 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-// addToFile adds content to file if it doesn't already exist
-func addToFile(filename, content string) {
-	if fileContains(filename, content) {
-		slog.Debug("entry already exists in file", "file", filename, "content", content)
-		return
-	}
-
+func appendToFile(filename, content string) {
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		fmt.Printf("Error appending to file %s: %v\n", filename, err)
 		return
 	}
 	defer file.Close()
-
-	_, err = file.WriteString(content + "\n")
-	if err != nil {
-		fmt.Printf("Error writing to file %s: %v\n", filename, err)
-		return
-	}
-
-	slog.Debug("added entry to file", "file", filename, "content", content)
-}
-
-func fileContains(filename, content string) bool {
-	file, err := os.Open(filename)
-	if err != nil {
-		return false
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		if strings.TrimSpace(scanner.Text()) == strings.TrimSpace(content) {
-			return true
-		}
-	}
-	return false
-}
-
-// removeFromFile removes content from file and returns true if content was found and removed
-func removeFromFile(filename, content string) bool {
-	if !fileContains(filename, content) {
-		slog.Debug("entry not found in file, nothing to remove", "file", filename, "content", content)
-		return false
-	}
-
-	file, err := os.Open(filename)
-	if err != nil {
-		slog.Debug("could not open file for reading", "file", filename, "error", err)
-		return false
-	}
-
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	found := false
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.TrimSpace(line) == strings.TrimSpace(content) {
-			found = true
-			continue // skip this line (remove it)
-		}
-		lines = append(lines, line)
-	}
-	file.Close()
-
-	if err := scanner.Err(); err != nil {
-		fmt.Printf("Error reading file %s: %v\n", filename, err)
-		return false
-	}
-
-	if !found {
-		slog.Debug("content not found in file during removal", "file", filename, "content", content)
-		return false
-	}
-
-	// Write the updated content back to the file
-	file, err = os.OpenFile(filename, os.O_WRONLY|os.O_TRUNC, 0o644)
-	if err != nil {
-		fmt.Printf("Error opening file for writing %s: %v\n", filename, err)
-		return false
-	}
-	defer file.Close()
-
-	writer := bufio.NewWriter(file)
-	for _, line := range lines {
-		if _, err := writer.WriteString(line + "\n"); err != nil {
-			fmt.Printf("Error writing to file: %v\n", err)
-			return false
-		}
-	}
-
-	if err := writer.Flush(); err != nil {
-		fmt.Printf("Error flushing file: %v\n", err)
-		return false
-	}
-
-	slog.Debug("removed entry from file", "file", filename, "content", content)
-	return true
-}
-
-// Deprecated: use addToFile instead
-func appendToFile(filename, content string) {
-	addToFile(filename, content)
+	_, _ = file.WriteString(content + "\n")
 }
