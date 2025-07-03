@@ -105,6 +105,21 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 		if fileInfo, err := os.Stat(logFile); err == nil {
 			if fileInfo.Size() > 5 {
 				fmt.Printf("Log file %s already exists, skipping build\n", logFile)
+
+				// Check if the existing log indicates success or failure
+				if isLogSuccessful(logFile) {
+					// Remove from failure list if it exists there
+					removeFromFile(failureFile, hclFile)
+					// Ensure it's in success list
+					if !isInFile(successFile, hclFile) {
+						appendToFile(successFile, hclFile)
+					}
+				} else {
+					// Ensure it's in failure list
+					if !isInFile(failureFile, hclFile) {
+						appendToFile(failureFile, hclFile)
+					}
+				}
 				continue
 			}
 		}
@@ -167,10 +182,18 @@ func BuildHclFiles(containerNamesToRemove, excludeHcls, hclFiles []string) {
 			failedBuilds = append(failedBuilds, hclFile)
 			log.Printf("Build duration for %s: %s (failed)\n", hclFile, buildDuration)
 			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (failed)\n", buildDuration))
+
+			// Remove from success list if it exists there
+			removeFromFile(successFile, hclFile)
+			// Add to failure list
 			appendToFile(failureFile, hclFile)
 		} else {
 			log.Printf("Build duration for %s: %s (success)\n", hclFile, buildDuration)
 			_, _ = tempLogFileWriter.WriteString(fmt.Sprintf("Build duration: %s (success)\n", buildDuration))
+
+			// Remove from failure list if it exists there
+			removeFromFile(failureFile, hclFile)
+			// Add to success list
 			appendToFile(successFile, hclFile)
 		}
 
@@ -211,4 +234,60 @@ func appendToFile(filename, content string) {
 	}
 	defer file.Close()
 	_, _ = file.WriteString(content + "\n")
+}
+
+// Helper function to check if a log file indicates success
+func isLogSuccessful(logFile string) bool {
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		return false
+	}
+
+	logContent := string(content)
+	// Check for success indicators in the log
+	return strings.Contains(logContent, "(success)") ||
+		strings.Contains(logContent, "Builds finished. The artifacts of successful builds are:")
+}
+
+// Helper function to check if a file contains a specific line
+func isInFile(filename, line string) bool {
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return false
+	}
+
+	lines := strings.Split(string(content), "\n")
+	for _, l := range lines {
+		if strings.TrimSpace(l) == strings.TrimSpace(line) {
+			return true
+		}
+	}
+	return false
+}
+
+// Helper function to remove a line from a file
+func removeFromFile(filename, lineToRemove string) {
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return
+	}
+
+	lines := strings.Split(string(content), "\n")
+	var newLines []string
+
+	for _, line := range lines {
+		if strings.TrimSpace(line) != strings.TrimSpace(lineToRemove) && strings.TrimSpace(line) != "" {
+			newLines = append(newLines, line)
+		}
+	}
+
+	newContent := strings.Join(newLines, "\n")
+	if len(newLines) > 0 {
+		newContent += "\n"
+	}
+
+	err = os.WriteFile(filename, []byte(newContent), 0o644)
+	if err != nil {
+		fmt.Printf("Error writing to file %s: %v\n", filename, err)
+	}
 }
